@@ -336,6 +336,7 @@ static netdev_tx_t bam_dmux_netdev_start_xmit(struct sk_buff *skb,
 	struct bam_dmux_netdev *bndev = netdev_priv(netdev);
 	struct bam_dmux *dmux = bndev->dmux;
 	struct bam_dmux_skb_dma *skb_dma;
+	unsigned int len = skb->len;
 	int active, ret;
 
 	skb_dma = bam_dmux_tx_queue(dmux, skb);
@@ -358,6 +359,8 @@ static netdev_tx_t bam_dmux_netdev_start_xmit(struct sk_buff *skb,
 		if (!atomic_long_fetch_or(BIT(skb_dma - dmux->tx_skbs),
 					  &dmux->tx_deferred_skb))
 			queue_pm_work(&dmux->tx_wakeup_work);
+		netdev->stats.tx_packets++;
+		netdev->stats.tx_bytes += len;
 		return NETDEV_TX_OK;
 	}
 
@@ -365,11 +368,14 @@ static netdev_tx_t bam_dmux_netdev_start_xmit(struct sk_buff *skb,
 		goto drop;
 
 	dma_async_issue_pending(dmux->tx);
+	netdev->stats.tx_packets++;
+	netdev->stats.tx_bytes += len;
 	return NETDEV_TX_OK;
 
 drop:
 	bam_dmux_tx_done(skb_dma);
 	dev_kfree_skb_any(skb);
+	netdev->stats.tx_dropped++;
 	return NETDEV_TX_OK;
 }
 
@@ -534,6 +540,8 @@ static void bam_dmux_cmd_data(struct bam_dmux_skb_dma *skb_dma)
 		break;
 	}
 
+	netdev->stats.rx_packets++;
+	netdev->stats.rx_bytes += hdr->len;
 	netif_receive_skb(skb);
 }
 
